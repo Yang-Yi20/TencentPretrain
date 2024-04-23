@@ -42,6 +42,7 @@ class LmTarget(nn.Module):
         self.criterion = nn.NLLLoss()
 
         # NormHead maxZ-loss
+        self.normHead = args.normHead
         if args.normHead:
             self.lm_head = NormHead(args.hidden_size, vocab_size, bias=False)
         self.z_loss = args.z_loss
@@ -63,7 +64,7 @@ class LmTarget(nn.Module):
         output = self.output_layer(memory_bank)
 
         # NormHead
-        if self.lm_head:
+        if self.normHead:
             hidden_states = output[0]
             output = self.lm_head(hidden_states)
 
