@@ -111,6 +111,9 @@ def optimization_opts(parser):
                                                 "constant", "constant_with_warmup", "inverse_sqrt", "tri_stage"],
                         default="linear", help="Scheduler type.")
 
+    parser.add_argument('--normHead', action='store_true')
+    parser.add_argument('--z_loss', action='store_true')
+
 
 def training_opts(parser):
     parser.add_argument("--batch_size", type=int, default=32,

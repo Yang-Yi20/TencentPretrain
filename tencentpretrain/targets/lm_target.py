@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
+import math
 
 from tencentpretrain import mpu
 from tencentpretrain.utils.constants import *
+from tencentpretrain.utils.NormHead import NormHead
 
 
 class LmTarget(nn.Module):
@@ -39,6 +41,11 @@ class LmTarget(nn.Module):
         self.softmax = nn.LogSoftmax(dim=-1)
         self.criterion = nn.NLLLoss()
 
+        # NormHead maxZ-loss
+        if args.normHead:
+            self.lm_head = NormHead(args.hidden_size, vocab_size, bias=False)
+        self.z_loss = args.z_loss
+
     def lm(self, memory_bank, tgt_lm, seg):
         # Language modeling (LM) with full softmax prediction.
         seg = seg.contiguous().view(-1)
@@ -54,6 +61,12 @@ class LmTarget(nn.Module):
             tgt_lm = tgt_lm[seg > loss_mask]
 
         output = self.output_layer(memory_bank)
+
+        # NormHead
+        if self.lm_head:
+            hidden_states = output[0]
+            output = self.lm_head(hidden_states)
+
         if self.pipeline_model_parallel_size > 1:
 
             return output, loss_mask
@@ -82,6 +95,12 @@ class LmTarget(nn.Module):
                 smooth_loss = smooth_loss.mean()
                 eps_i = self.label_smoothing / (output.size(-1) - 1)
                 loss = (1.0 - self.label_smoothing - eps_i) * nll_loss + eps_i * smooth_loss
+
+            if self.z_loss:
+                softmax_normalizer = output.max(-1).values ** 2
+                z_loss = 2 * math.exp(-4) * softmax_normalizer.mean()
+
+                loss += z_loss
 
         return loss
 
