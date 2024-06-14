@@ -20,5 +20,5 @@
   "target": ["lm"],
   "normHead": true,
   "z_loss": true,
-  "tokenizer": "bpe"
+  "use_xformers": true
 }

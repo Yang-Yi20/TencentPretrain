@@ -52,6 +52,8 @@ def model_opts(parser):
                         help="whether use alibi position embedding.")
     parser.add_argument("--layer_number_scale", action="store_true",
                         help="whether use layer number scaling.")
+    parser.add_argument("--use_xformers", action="store_true",
+                        help="whether use xformers")
 
     vision_opts(parser)
     audio_opts(parser)

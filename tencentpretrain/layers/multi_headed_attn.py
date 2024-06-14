@@ -4,6 +4,17 @@ import torch.nn as nn
 from tencentpretrain import mpu
 from tencentpretrain.utils.rope import apply_rotary_emb
 from tencentpretrain.utils.lora import LoraLinear
+from transformers.utils import logging
+
+# add xformers
+logger = logging.get_logger(__name__)
+try:
+    from xformers import ops as xops
+except ImportError:
+    xops = None
+    logger.warning(
+        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
+    )
 
 
 def repeat_kv(x: torch.Tensor, repeat_num: int) -> torch.Tensor:
@@ -27,8 +38,9 @@ class MultiHeadedAttention(nn.Module):
     """
 
     def __init__(self, hidden_size, heads_num, attention_head_size, local_kv_heads_num, dropout, has_bias=True, with_scale=True,
-                 lora_params=None, layer_number=None):
+                 lora_params=None, layer_number=None, use_xformers=False):
         super(MultiHeadedAttention, self).__init__()
+        self.use_xformers = use_xformers
         self.heads_num = heads_num
         self.per_head_size = attention_head_size
         self.with_scale = with_scale
@@ -107,38 +119,50 @@ class MultiHeadedAttention(nn.Module):
         if freqs_cis is not None:
             query, key = apply_rotary_emb(query.transpose(1,2), key.transpose(1,2), freqs_cis=freqs_cis)
 
-        scores = torch.matmul(query, key.transpose(-2, -1))
-
-        if position_bias is not None:
-            scores = scores + position_bias
-
-        if self.with_scale:
-            if self.layer_number is not None:
-                scores = scores * (1.0 / self.norm_factor)
-            else:
-                scores = scores / math.sqrt(float(per_head_size))
-        if alibi is not None:
-            scores = scores.reshape((-1, scores.shape[-2], scores.shape[-1]))
-            scores += (1.0 / self.layer_number) * alibi
-            scores = scores.view(-1, heads_num, scores.shape[-2], scores.shape[-1])
-
-        scores = scores + mask.type_as(scores)
-
-        # scaled softmax
-        if self.layer_number is not None:
-            scores = (scores * self.layer_number) + mask
-            scores = torch.max(scores, torch.tensor(-10000))
-
         prev_attn_out = None
+        # xformers attention
+        if xops is not None and self.use_xformers and self.training:
+            query = query.transpose(1, 2)
+            key = key.transpose(1, 2)
+            value= value.transpose(1, 2)
+            output = xops.memory_efficient_attention(
+                query, key, value, attn_bias=xops.LowerTriangularMask()
+            )
+            output = unshape(output)
+        else:
+            scores = torch.matmul(query, key.transpose(-2, -1))
 
-        if has_residual_attention:
-            if prev_attn is not None:
-                scores += prev_attn
-            prev_attn_out = scores
+            if position_bias is not None:
+                scores = scores + position_bias
 
-        probs = nn.Softmax(dim=-1)(scores)
-        probs = self.dropout(probs)
-        output = unshape(torch.matmul(probs, value))
+            if self.with_scale:
+                if self.layer_number is not None:
+                    scores = scores * (1.0 / self.norm_factor)
+                else:
+                    scores = scores / math.sqrt(float(per_head_size))
+            if alibi is not None:
+                scores = scores.reshape((-1, scores.shape[-2], scores.shape[-1]))
+                scores += (1.0 / self.layer_number) * alibi
+                scores = scores.view(-1, heads_num, scores.shape[-2], scores.shape[-1])
+
+            scores = scores + mask.type_as(scores)
+
+            # scaled softmax
+            if self.layer_number is not None:
+                scores = (scores * self.layer_number) + mask
+                scores = torch.max(scores, torch.tensor(-10000))
+
+            prev_attn_out = None
+
+            if has_residual_attention:
+                if prev_attn is not None:
+                    scores += prev_attn
+                prev_attn_out = scores
+
+            probs = nn.Softmax(dim=-1)(scores)
+            probs = self.dropout(probs)
+            output = unshape(torch.matmul(probs, value))
+
         output = self.final_linear(output)
         return output, prev_attn_out
 
