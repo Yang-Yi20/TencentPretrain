@@ -3,7 +3,7 @@ import collections
 import torch
 import os
 import json
-
+import torch.nn as nn
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--input_model_path", type=str, default="models/baichuan-7b/",
@@ -64,6 +64,6 @@ for i in range(layers_num):
         get_weight_from_name("model.layers." + str(i) + ".post_attention_layernorm.weight")
 
 output_model["encoder.layer_norm.weight"] = get_weight_from_name("model.norm.weight")
-output_model["target.lm.output_layer.weight"] = get_weight_from_name("lm_head.weight")
+output_model["target.lm.output_layer.weight"] = nn.functional.normalize(get_weight_from_name("lm_head.weight").float())
 
 torch.save(output_model, args.output_model_path)
