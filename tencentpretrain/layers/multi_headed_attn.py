@@ -4,17 +4,12 @@ import torch.nn as nn
 from tencentpretrain import mpu
 from tencentpretrain.utils.rope import apply_rotary_emb
 from tencentpretrain.utils.lora import LoraLinear
-from transformers.utils import logging
 
 # add xformers
-logger = logging.get_logger(__name__)
 try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warning(
-        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
-    )
 
 
 def repeat_kv(x: torch.Tensor, repeat_num: int) -> torch.Tensor:
