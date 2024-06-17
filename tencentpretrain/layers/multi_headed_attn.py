@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from tencentpretrain import mpu
-from tencentpretrain.utils.rope import apply_rotary_emb
+from tencentpretrain.utils.rope import apply_rotary_emb, apply_rotary_emb_baichuan
 from tencentpretrain.utils.lora import LoraLinear
 
 # add xformers
@@ -33,8 +33,9 @@ class MultiHeadedAttention(nn.Module):
     """
 
     def __init__(self, hidden_size, heads_num, attention_head_size, local_kv_heads_num, dropout, has_bias=True, with_scale=True,
-                 lora_params=None, layer_number=None, use_xformers=False):
+                 lora_params=None, layer_number=None, use_xformers=False, baichuan_RoPE=False):
         super(MultiHeadedAttention, self).__init__()
+        self.baichuan_RoPE = baichuan_RoPE
         self.use_xformers = use_xformers
         self.heads_num = heads_num
         self.per_head_size = attention_head_size
@@ -112,7 +113,11 @@ class MultiHeadedAttention(nn.Module):
 
 
         if freqs_cis is not None:
-            query, key = apply_rotary_emb(query.transpose(1,2), key.transpose(1,2), freqs_cis=freqs_cis)
+            if self.baichuan_RoPE:
+                query, key = apply_rotary_emb_baichuan(query, key, freqs_cis=freqs_cis)
+            else:
+                query, key = apply_rotary_emb(query.transpose(1,2), key.transpose(1,2), freqs_cis=freqs_cis)
+            
 
         prev_attn_out = None
         # xformers attention

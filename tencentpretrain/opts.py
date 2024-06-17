@@ -54,6 +54,8 @@ def model_opts(parser):
                         help="whether use layer number scaling.")
     parser.add_argument("--use_xformers", action="store_true",
                         help="whether use xformers")
+    parser.add_argument("--baichuan_RoPE", action="store_true",
+                        help="whether use baichuan_RoPE")
 
     vision_opts(parser)
     audio_opts(parser)

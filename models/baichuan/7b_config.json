@@ -20,5 +20,6 @@
   "target": ["lm"],
   "normHead": true,
   "z_loss": true,
-  "use_xformers": true
+  "use_xformers": true,
+  "baichuan_RoPE": true
 }

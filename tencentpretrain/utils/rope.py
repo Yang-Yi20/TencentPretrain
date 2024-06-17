@@ -28,3 +28,26 @@ def apply_rotary_emb(
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq).transpose(1,2), xk_out.type_as(xk).transpose(1,2)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_emb_baichuan(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    cos_sin = torch.view_as_real(freqs_cis)
+    cos = cos_sin[:, :, 0]
+    sin = cos_sin[:, :, 1]
+    cos = torch.cat((cos, cos), dim=-1).unsqueeze(0).unsqueeze(0)
+    sin = torch.cat((sin, sin), dim=-1).unsqueeze(0).unsqueeze(0)
+    q_embed = (xq.float() * cos) + (rotate_half(xq.float()) * sin)
+    k_embed = (xk.float() * cos) + (rotate_half(xk.float()) * sin)
+    return q_embed.to(xq.dtype), k_embed.to(xk.dtype)
+    
