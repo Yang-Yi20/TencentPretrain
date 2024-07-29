@@ -60,13 +60,15 @@ class LmTarget(nn.Module):
         if tgt_lm is not None:
             tgt_lm = tgt_lm.contiguous().view(-1)
             tgt_lm = tgt_lm[seg > loss_mask]
-
-        output = self.output_layer(memory_bank)
-
-        # NormHead
+        
         if self.normHead:
-            hidden_states = output[0]
-            output = self.lm_head(hidden_states)
+            output = self.lm_head(memory_bank)
+        else:
+            output = self.output_layer(memory_bank)
+
+        if self.z_loss:
+            softmax_normalizer = output.max(-1).values ** 2
+            z_loss = 2 * math.exp(-4) * softmax_normalizer.mean()
 
         if self.pipeline_model_parallel_size > 1:
 
@@ -98,9 +100,6 @@ class LmTarget(nn.Module):
                 loss = (1.0 - self.label_smoothing - eps_i) * nll_loss + eps_i * smooth_loss
 
             if self.z_loss:
-                softmax_normalizer = output.max(-1).values ** 2
-                z_loss = 2 * math.exp(-4) * softmax_normalizer.mean()
-
                 loss += z_loss
 
         return loss
